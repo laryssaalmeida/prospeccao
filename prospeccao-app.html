@@ -157,6 +157,14 @@ tr.lnk:hover{background:rgba(243,240,233,.04)}
 .week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--line);border-radius:4px;overflow:hidden}
 .wd{border-right:1px solid var(--line);min-height:150px;padding:8px 6px;background:rgba(12,13,15,.3)}
 .wd:last-child{border-right:0}
+.mes .wd{min-height:96px;border-bottom:1px solid var(--line)}
+.mes .wd:nth-child(7n){border-right:0}
+.mes .wd.fora{opacity:.35}
+.mes .dh{text-align:left;margin-bottom:4px}
+.mes .dh b{display:inline;font-size:15px}
+.dsem{text-align:center;font-size:11px;color:var(--mut);padding:6px 0;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--line);border-right:1px solid var(--line)}
+.dsem:nth-child(7n){border-right:0}
+.agbtn{float:right;display:flex;gap:6px;align-items:center}
 .wd.hj{background:rgba(253,87,31,.08)}
 .wd .dh{text-align:center;font-size:11px;color:var(--mut);margin-bottom:8px;text-transform:uppercase;letter-spacing:.06em}
 .wd .dh b{display:block;font-family:"Barlow Condensed",sans-serif;font-size:17px;color:var(--txt);letter-spacing:0}
@@ -284,7 +292,7 @@ if(fsOK&&typeof indexedDB!=='undefined'){idbGet().then(function(h){if(h&&!fh){pe
 if(window.addEventListener)window.addEventListener('focus',function(){lerArq(false)});
 
 /* ---------- utilidades ---------- */
-var st={view:'hoje',id:null,modo:'funil',f:{q:'',area:'',cidade:''},del:false,imp:false,edit:null,impMsg:'',drag:null,rs:null,arq:false,em:null};
+var st={view:'hoje',id:null,modo:'funil',f:{q:'',area:'',cidade:''},del:false,imp:false,edit:null,impMsg:'',drag:null,rs:null,arq:false,em:null,agMes:false,agRef:null};
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function pad(n){return n<10?'0'+n:''+n}
 function iso(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
@@ -409,6 +417,10 @@ function prMini(c){var r=c.situacao==='Reunião marcada';return '<div class="um"
 function vazio(){return '<div class="card empty"><div class="ttl">Vamos começar</div>Cole os contatos preparados à noite, crie um contato ou veja um exemplo.<div class="acts"><button class="btn" onclick="go(\'chamar\');st.imp=true;render()">Colar contatos</button><button class="btn sec" onclick="criar()">'+ic('plus')+'Novo contato</button><button class="btn sec" onclick="exemplo()">Ver um exemplo</button></div></div>'}
 
 /* ----- HOJE ----- */
+function agendaMes(ag,t){var r=st.agRef||t.slice(0,8)+'01',y=+r.slice(0,4),m=+r.slice(5,7);var p1=r.slice(0,8)+'01';var d0=new Date(y,m-1,1),w=(d0.getDay()+6)%7,ini=soma(p1,-w);var nd=new Date(y,m,0).getDate(),tot=Math.ceil((w+nd)/7)*7;var MS=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];function nav(k){var d=new Date(y,m-1+k,1);return iso(d)}
+ var h='<div class="card"><h3><span class="agbtn"><button class="btn ghost sm" onclick="st.agRef=\''+nav(-1)+'\';render()">‹</button><button class="btn ghost sm" onclick="st.agRef=\''+nav(1)+'\';render()">›</button><button class="btn sec sm" onclick="st.agMes=false;render()">Ver a semana</button></span>Agenda do mês <span class="muted" style="letter-spacing:0;text-transform:none;font-weight:500">'+MS[m-1]+' de '+y+'</span></h3><div class="weekwrap"><div class="week mes">'+['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'].map(function(n){return '<div class="dsem">'+n+'</div>'}).join('');
+ for(var i=0;i<tot;i++){var d=soma(ini,i),l=ag.filter(function(c){return c.proxData===d});h+='<div class="wd'+(d===t?' hj':'')+(+d.slice(5,7)!==m?' fora':'')+'"><div class="dh"><b>'+d.slice(8)+'</b></div>'+l.map(function(c){return '<div class="ev '+(c.situacao==='Reunião marcada'?'reu':'ret')+'" onclick="go(\'ficha\',\''+c.id+'\')" title="'+esc(c.nome+' · '+(c.proxAcao||''))+'">'+esc(c.nome)+'</div>'}).join('')+'</div>'}
+ return h+'</div></div><div class="legend"><span><i style="background:#7cc79a"></i>Reunião</span><span><i style="background:#FD571F"></i>Retomar conversa</span></div></div>'}
 function semanaIni(){var d=new Date();var w=(d.getDay()+6)%7;d.setDate(d.getDate()-w);return iso(d)}
 function grafLinha(){var t=hoje(),N=14,ys=[];for(var i=N-1;i>=0;i--){var d=soma(t,-i),n=0;db.contatos.forEach(function(c){c.fu.forEach(function(f){if(f.data===d&&f.envio)n++})});ys.push(n)}
  var W=600,H=170,P=18,mx=Math.max(4,Math.max.apply(null,ys));var pt=ys.map(function(y,i){return[P+i*(W-2*P)/(N-1),H-P-(y/mx)*(H-2*P)]});
@@ -429,7 +441,7 @@ function vHoje(){var t=hoje(),hr=new Date().getHours(),L=listas(),env=enviadasHo
  h+='<div class="dash"><div>';
  var ini=semanaIni(),fim=soma(ini,6),dn=['Seg','Ter','Qua','Qui','Sex','Sáb','Dom'];
  var ag=db.contatos.filter(function(c){return(ativoCRM(c)||c.situacao==='Futuro')&&c.proxData});
- h+='<div class="card"><h3>Agenda da semana <span class="muted" style="letter-spacing:0;text-transform:none;font-weight:500">'+brc(ini)+' a '+brc(fim)+'</span></h3><div class="weekwrap"><div class="week">'+dn.map(function(n,i){var d=soma(ini,i);var l=ag.filter(function(c){return c.proxData===d});return '<div class="wd'+(d===t?' hj':'')+'"><div class="dh">'+n+'<b>'+d.slice(8)+'</b></div>'+l.map(function(c){return '<div class="ev '+(c.situacao==='Reunião marcada'?'reu':'ret')+'" onclick="go(\'ficha\',\''+c.id+'\')" title="'+esc(c.nome+' · '+c.proxAcao)+'">'+esc(c.nome)+'<small>'+esc(c.proxAcao||'Retornar')+'</small></div>'}).join('')+'</div>'}).join('')+'</div></div><div class="legend"><span><i style="background:#7cc79a"></i>Reunião</span><span><i style="background:#FD571F"></i>Retomar conversa</span></div></div>';
+ h+=st.agMes?agendaMes(ag,t):'<div class="card"><h3><span class="agbtn"><button class="btn sec sm" onclick="st.agMes=true;st.agRef=null;render()">Ver o mês</button></span>Agenda da semana <span class="muted" style="letter-spacing:0;text-transform:none;font-weight:500">'+brc(ini)+' a '+brc(fim)+'</span></h3><div class="weekwrap"><div class="week">'+dn.map(function(n,i){var d=soma(ini,i);var l=ag.filter(function(c){return c.proxData===d});return '<div class="wd'+(d===t?' hj':'')+'"><div class="dh">'+n+'<b>'+d.slice(8)+'</b></div>'+l.map(function(c){return '<div class="ev '+(c.situacao==='Reunião marcada'?'reu':'ret')+'" onclick="go(\'ficha\',\''+c.id+'\')" title="'+esc(c.nome+' · '+c.proxAcao)+'">'+esc(c.nome)+'<small>'+esc(c.proxAcao||'Retornar')+'</small></div>'}).join('')+'</div>'}).join('')+'</div></div><div class="legend"><span><i style="background:#7cc79a"></i>Reunião</span><span><i style="background:#FD571F"></i>Retomar conversa</span></div></div>';
  h+='<div class="row" style="gap:18px"><div class="card chart" style="flex:1.4;min-width:300px"><h3>Ritmo de envios</h3>'+grafLinha()+'</div><div class="card" style="flex:1;min-width:260px"><h3>CRM agora</h3>'+grafBarras()+'</div></div>';
  h+='</div><div>';
  h+='<div class="card upc"><h3>CRM para hoje</h3>'+((crmHoje.concat(fut)).map(prMini).join('')||'<div class="muted">Nenhuma conversa para retomar hoje.</div>')+'</div>';
