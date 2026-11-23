@@ -385,6 +385,22 @@ function importarTxt(txt){var arr,d=null,t=String(txt||'').trim();if(!t){st.impM
  save();st.imp=false;st.impMsg=n+' contato(s) novo(s).'+(at?' '+at+' já existia(m): só as mensagens foram atualizadas.':'');render()}
 function importarArq(inp){var f=inp.files[0];if(!f)return;var r=new FileReader();r.onload=function(){importarTxt(r.result)};r.readAsText(f)}
 function setCfg(k,v){db.cfg[k]=v;save();foot()}
+function gravaMetaDia(){var t=hoje(),m=db.cfg.metasDia||(db.cfg.metasDia={}),a=m[t],msg=Number(db.cfg.metaMsg)||0,lig=Number(db.cfg.metaLig)||0;if(!a||a.msg!==msg||a.lig!==lig){m[t]={msg:msg,lig:lig};save()}}
+function histMetas(){var ref=st.hmRef||hoje().slice(0,7),t=hoje(),dias={},md=db.cfg.metasDia||{};
+ db.contatos.forEach(function(c){(c.fu||[]).forEach(function(f){if(!f.data||f.data.slice(0,7)!==ref)return;var d=dias[f.data]||(dias[f.data]={lig:0,msg:0});if(f.ligacao)d.lig++;if(f.envio)d.msg++})});
+ Object.keys(md).forEach(function(k){if(k.slice(0,7)===ref&&!dias[k])dias[k]={lig:0,msg:0}});
+ var ks=Object.keys(dias).filter(function(k){return k<=t&&(dias[k].lig||dias[k].msg||md[k])}).sort().reverse(),dn=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'],mn=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+ var p=ref.split('-'),ant=iso(new Date(+p[0],+p[1]-2,1)).slice(0,7),prox=iso(new Date(+p[0],+p[1],1)).slice(0,7);
+ var bl=0,ml=0,bm=0,mm=0,tl=0,tm=0;
+ function cel(n,m){if(m===undefined)return '<b>'+n+'</b> <span class="muted">(meta não registrada)</span>';if(!m)return '<b>'+n+'</b> <span class="muted">(sem meta)</span>';return '<b>'+n+' de '+m+'</b> '+(n>=m?'<span style="color:#7cc79a">✓ batida</span>':'<span style="color:#FD571F">não batida</span>')}
+ var rows=ks.map(function(k){var d=dias[k],m=md[k],dt=new Date(+k.slice(0,4),+k.slice(5,7)-1,+k.slice(8));tl+=d.lig;tm+=d.msg;
+  if(m){if(m.lig){ml++;if(d.lig>=m.lig)bl++}if(m.msg){mm++;if(d.msg>=m.msg)bm++}}
+  return '<tr><td style="white-space:nowrap"><b>'+brc(k)+'</b> <span class="muted">'+dn[dt.getDay()]+'</span></td><td>'+cel(d.lig,m&&m.lig)+'</td><td>'+cel(d.msg,m&&m.msg)+'</td></tr>'}).join('');
+ var h='<div class="card"><h3><span class="agbtn"><button class="btn sec sm" onclick="st.hmRef=\''+ant+'\';render()">‹</button> <button class="btn sec sm" onclick="st.hmRef=\''+prox+'\';render()">›</button></span>Histórico das metas diárias <span class="muted" style="letter-spacing:0;text-transform:none;font-weight:500">'+mn[+p[1]-1]+' de '+p[0]+'</span></h3>';
+ if(!ks.length)return h+'<div class="muted">Nenhuma ligação ou mensagem registrada neste mês.</div></div>';
+ h+='<div class="grid" style="margin-bottom:12px">'+[['Ligações no mês',tl],['Mensagens no mês',tm],['Dias com meta de ligação batida',ml?bl+' de '+ml:'-'],['Dias com meta de mensagem batida',mm?bm+' de '+mm:'-']].map(function(x){return '<div class="fact"><small>'+x[0]+'</small><span class="big" style="font-family:\'Barlow Condensed\',sans-serif;font-size:30px;font-weight:700;color:var(--txt)">'+x[1]+'</span></div>'}).join('')+'</div>';
+ h+='<div class="tblwrap"><table><tr><th>Dia</th><th>Ligações</th><th>Mensagens</th></tr>'+rows+'</table></div><div class="muted" style="margin-top:8px">A meta de cada dia passou a ser guardada em 23/11/2026. Nos dias anteriores aparece só o que foi feito.</div></div>';
+ return h}
 function setF(k,v){st.f[k]=v;renderLista()}
 function nCli(){return db.contatos.filter(function(c){return c.situacao==='Cliente'}).length+Number(db.cfg.fechados||0)}
 function uniq(k){var o={};db.contatos.forEach(function(c){if(c[k])o[c[k]]=1});return Object.keys(o).sort()}
@@ -400,7 +416,7 @@ function listas(){var t=hoje();
 /* ---------- telas ---------- */
 function foot(){var el=document.getElementById('foot');if(!el)return;var cli=nCli(),meta=Number(db.cfg.meta)||1;
  el.innerHTML='Meta: '+cli+' de '+esc(db.cfg.meta)+' clientes<div class="mt"><i style="width:'+Math.min(100,Math.round(cli/meta*100))+'%"></i></div>'+esc(fsMsg?fsMsg:(fh?'Salvando em '+fh.name:'Dados neste navegador'))}
-function render(){arquivarVencidos();
+function render(){arquivarVencidos();gravaMetaDia();
  var L=listas(),nCh=L.novos.length+L.ret.length,nCrm=db.contatos.filter(ativoCRM).length;
  var tabs=[['hoje','Hoje','home',''],['chamar','A chamar','send',nCh],['crm','CRM','users',nCrm],['numeros','Números','chart',''],['config','Ajustes','gear','']];
  document.getElementById('nav').innerHTML=tabs.map(function(t){var on=st.view===t[0]||(st.view==='ficha'&&t[0]===(noCRM(cur()||{})?'crm':'chamar'));return '<button class="'+(on?'on':'')+'" onclick="go(\''+t[0]+'\')">'+ic(t[2])+t[1]+(t[3]?'<span class="nb">'+t[3]+'</span>':'')+'</button>'}).join('');
@@ -515,6 +531,7 @@ function vNumeros(){var l=db.contatos,ini7=mais(-6),t=hoje();
  if(env){if(nr/Object.keys(trab).length<0.1)dx='Poucas respostas para o número de mensagens. Revise a lista (pontuação) ou o elogio da primeira mensagem.';else if(nr&&!rm&&!rf)dx='As pessoas respondem, mas não marcam reunião. O ponto a ajustar é a conversa depois da resposta.';else if(rm&&rf<rm&&!fe)dx='Reuniões marcadas que ainda não aconteceram. Confirme cada uma na véspera.';else dx='O funil está andando. Mantenha o ritmo de envios.'}
  var tot=l.length||1,cli=nCli();
  var h='<h2>Núme<span class="dim">ros</span></h2><div class="lead">O retrato da prospecção, para decidir onde insistir.</div>';
+ h+=histMetas();
  h+='<div class="card"><h3>Diagnóstico da semana (últimos 7 dias)</h3><div class="grid" style="margin-bottom:12px">'+[['Mensagens enviadas',env],['Responderam',nr],['Reuniões marcadas',rm],['Reuniões feitas',rf],['Fechados',fe]].map(function(x){return '<div class="fact"><small>'+x[0]+'</small><span class="big" style="font-family:\'Barlow Condensed\',sans-serif;font-size:30px;font-weight:700;color:var(--txt)">'+x[1]+'</span></div>'}).join('')+'</div><div class="nextbar" style="margin:0">'+ic('star')+'<span>'+esc(dx)+'</span></div></div>';
  h+='<div class="grid"><div class="card stat">'+ring(cli/(Number(db.cfg.meta)||1))+'<div><div class="big">'+cli+' de '+esc(db.cfg.meta)+'</div><div class="cap">clientes na meta ('+esc(db.cfg.fechados)+' antes do app)</div></div></div><div class="card stat">'+ring(conta(l,noCRM)/tot)+'<div><div class="big">'+conta(l,noCRM)+'</div><div class="cap">contatos no CRM de '+l.length+'</div></div></div><div class="card stat">'+ring(conta(l,function(c){return c.situacao==='Arquivado'})/tot,'#8A857C')+'<div><div class="big">'+conta(l,function(c){return c.situacao==='Arquivado'})+'</div><div class="cap">saíram da lista sem resposta</div></div></div></div>';
  h+='<div class="card"><h3>Todos os contatos por situação</h3><div class="fun">'+SIT.map(function(s){var n=conta(l,function(c){return c.situacao===s});return '<div class="fr"><span>'+esc(nomeSit(s))+'</span><div class="tr"><i style="width:'+Math.round(n/tot*100)+'%"></i></div><b>'+n+'</b></div>'}).join('')+'</div></div>';
