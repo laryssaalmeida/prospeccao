@@ -318,6 +318,8 @@ function pts(c){if(c.sinais&&c.sinais.some(Boolean)){var s=0;SINAIS.forEach(func
 function nivel(p){return p>=7?['Prioridade','#FD571F']:p>=4?['Médio','#d9d4c9']:['Baixo','#8A857C']}
 function selo(c){var p=pts(c),n=nivel(p);return '<span class="pts" style="border-color:'+n[1]+';color:'+n[1]+'">'+p+'</span>'}
 function noCRM(c){return CRM.indexOf(c.situacao)>=0}
+function canalDe(c){return c.canal||'WhatsApp'}
+function outroCanal(c){return canalDe(c)!=='WhatsApp'}
 function ativoCRM(c){return['Respondeu','Pediu para retornar','Reunião marcada','Reunião feita'].indexOf(c.situacao)>=0}
 function porPts(a,b){return pts(b)-pts(a)}
 function maxTent(){return 1+(Number(db.cfg.extras)||0)}
@@ -408,9 +410,9 @@ function filtrar(l){var f=st.f,q=f.q.toLowerCase();return l.filter(function(c){r
 
 /* listas da tela "A chamar" */
 function listas(){var t=hoje();
- var novos=db.contatos.filter(function(c){return c.situacao==='A contatar'}).sort(porPts);
- var ret=db.contatos.filter(function(c){return c.situacao==='Aguardando resposta'&&c.tent<maxTent()&&c.proxData&&c.proxData<=t}).sort(function(a,b){return a.proxData<b.proxData?-1:1});
- var esp=db.contatos.filter(function(c){return c.situacao==='Aguardando resposta'&&!(c.tent<maxTent()&&c.proxData&&c.proxData<=t)}).sort(function(a,b){return a.proxData<b.proxData?-1:1});
+ var novos=db.contatos.filter(function(c){return c.situacao==='A contatar'&&!outroCanal(c)}).sort(porPts);
+ var ret=db.contatos.filter(function(c){return c.situacao==='Aguardando resposta'&&!outroCanal(c)&&c.tent<maxTent()&&c.proxData&&c.proxData<=t}).sort(function(a,b){return a.proxData<b.proxData?-1:1});
+ var esp=db.contatos.filter(function(c){return c.situacao==='Aguardando resposta'&&!outroCanal(c)&&!(c.tent<maxTent()&&c.proxData&&c.proxData<=t)}).sort(function(a,b){return a.proxData<b.proxData?-1:1});
  return{novos:novos,ret:ret,esp:esp}}
 
 /* ---------- telas ---------- */
@@ -418,13 +420,14 @@ function foot(){var el=document.getElementById('foot');if(!el)return;var cli=nCl
  el.innerHTML='Meta: '+cli+' de '+esc(db.cfg.meta)+' clientes<div class="mt"><i style="width:'+Math.min(100,Math.round(cli/meta*100))+'%"></i></div>'+esc(fsMsg?fsMsg:(fh?'Salvando em '+fh.name:'Dados neste navegador'))}
 function render(){arquivarVencidos();gravaMetaDia();
  var L=listas(),nCh=L.novos.length+L.ret.length,nCrm=db.contatos.filter(ativoCRM).length;
- var tabs=[['hoje','Hoje','home',''],['chamar','A chamar','send',nCh],['crm','CRM','users',nCrm],['numeros','Números','chart',''],['config','Ajustes','gear','']];
+ var nOc=db.contatos.filter(function(c){return outroCanal(c)&&['Sem interesse','Arquivado','Cliente'].indexOf(c.situacao)<0}).length;
+ var tabs=[['hoje','Hoje','home',''],['chamar','A chamar','send',nCh],['crm','CRM','users',nCrm],['canais','Outros canais','chat',nOc],['numeros','Números','chart',''],['config','Ajustes','gear','']];
  document.getElementById('nav').innerHTML=tabs.map(function(t){var on=st.view===t[0]||(st.view==='ficha'&&t[0]===(noCRM(cur()||{})?'crm':'chamar'));return '<button class="'+(on?'on':'')+'" onclick="go(\''+t[0]+'\')">'+ic(t[2])+t[1]+(t[3]?'<span class="nb">'+t[3]+'</span>':'')+'</button>'}).join('');
  var h='';
  if(pend&&!fh)h+='<div class="warn">O arquivo de dados "'+esc(pend.name)+'" precisa ser reconectado para continuar salvando nele.<button class="btn sm" onclick="reconectar()">Reconectar</button></div>';
  else if(!persist&&!fh)h+='<div class="warn">Nesta pré-visualização os dados não ficam salvos ao fechar. No arquivo aberto no seu navegador, eles ficam.</div>';
  else if(!fh&&db.contatos.length&&(!db.cfg.backup||db.cfg.backup<mais(-7)))h+='<div class="warn">Os dados estão só neste navegador. Conecte um arquivo de dados nos Ajustes ou faça um backup.<button class="btn sm sec" onclick="exportar()">Exportar backup</button></div>';
- h+=({hoje:vHoje,chamar:vChamar,crm:vCRM,ficha:vFicha,numeros:vNumeros,config:vConfig}[st.view])();
+ h+=({hoje:vHoje,chamar:vChamar,crm:vCRM,canais:vCanais,ficha:vFicha,numeros:vNumeros,config:vConfig}[st.view])();
  document.getElementById('app').innerHTML=h;foot();auto();
  if(st.view==='crm')renderLista();
 }
@@ -502,11 +505,20 @@ function inp(l,f,c,ph){return '<label>'+l+'<input value="'+esc(c[f]==null?'':c[f
 function txa(l,f,c,ph){return '<label>'+l+'<textarea rows="3" placeholder="'+esc(ph||'')+'" onchange="upd(\''+f+'\',this.value)">'+esc(c[f]||'')+'</textarea></label>'}
 function seg(l,f,c,arr){return '<label style="margin:0">'+l+'</label><div class="seg">'+arr.map(function(o){return '<button class="'+(c[f]===o?'on':'')+'" onclick="pick(\''+f+'\',\''+o+'\')">'+esc(o||'A definir')+'</button>'}).join('')+'</div>'}
 function fact(l,v){return '<div class="fact'+(v?'':' vazio')+'"><small>'+l+'</small>'+(v?esc(v):'A preencher')+'</div>'}
+function vCanais(){var a=st.cn||'E-mail',fim=['Sem interesse','Arquivado','Cliente'];
+ var l=db.contatos.filter(function(c){return canalDe(c)===a&&fim.indexOf(c.situacao)<0}).sort(function(x,y){return(x.proxData||'9')<(y.proxData||'9')?-1:1});
+ var ne=db.contatos.filter(function(c){return canalDe(c)==='E-mail'&&fim.indexOf(c.situacao)<0}).length,ni=db.contatos.filter(function(c){return canalDe(c)==='Instagram'&&fim.indexOf(c.situacao)<0}).length;
+ var h='<h2>Outros <span class="dim">canais</span></h2><div class="lead">Contatos que não vão pelo WhatsApp: empresas maiores, em que a proposta precisa chegar por e-mail a quem decide, e contatos guardados para o direct do Instagram. Eles não entram na fila de A chamar.</div>';
+ h+='<div class="seg">'+[['E-mail',ne],['Instagram',ni]].map(function(o){return '<button class="'+(a===o[0]?'on':'')+'" onclick="st.cn=\''+o[0]+'\';render()">'+(o[0]==='E-mail'?'Por e-mail':'Por Instagram')+' ('+o[1]+')</button>'}).join('')+'</div>';
+ if(!l.length)return h+'<div class="card muted">Nenhum contato aqui. Para mover um contato, abra a ficha e escolha o canal.</div>';
+ h+='<div class="card">'+l.map(function(c){var ig=String(c.instagram||'').replace(/^@/,'').trim();return pr(c)+'<div class="muted" style="margin:-4px 0 12px 52px;font-size:13px">'+(a==='E-mail'?(c.email?'E-mail: <b>'+esc(c.email)+'</b>':'E-mail ainda não informado'):(ig?'<a target="_blank" rel="noopener" href="https://www.instagram.com/'+esc(encodeURIComponent(ig))+'/">@'+esc(ig)+'</a>':'Instagram não informado'))+'</div>'}).join('')+'</div>';
+ return h}
 function vFicha(){var c=cur();if(!c)return vChamar();
  var edit=st.edit===null?!c.nome:st.edit,ig=String(c.instagram||'').replace(/^@/,'').trim(),p=pts(c),nv=nivel(p),volta=noCRM(c)||c.situacao==='Arquivado'?'crm':'chamar';
  var h='<button class="btn ghost sm" style="margin:-8px 0 14px -8px" onclick="go(\''+volta+'\')">'+ic('back')+(volta==='crm'?'CRM':'A chamar')+'</button>';
  h+='<div class="phead">'+av(c,1)+'<div class="grow"><h2 style="text-transform:none">'+esc(c.nome||'Novo contato')+'</h2><div class="muted" style="font-size:14px">'+esc([c.area,c.cidade].filter(Boolean).join(' · ')||'Preencha os dados para começar')+'</div><div class="chips">'+tag(c.situacao)+'<span class="chip" style="border-color:'+nv[1]+';color:'+nv[1]+'">'+ic('star')+p+' pontos</span><span class="chip">'+c.tent+' mensagem(ns) enviada(s)</span>'+(c.servico?'<span class="chip">'+esc(c.servico)+'</span>':'')+'</div></div><div class="acts">'+(ig?'<a class="btn sec sm" target="_blank" rel="noopener" href="https://www.instagram.com/'+esc(encodeURIComponent(ig))+'/">'+ic('insta')+'Instagram</a>':'')+(dig(c.whatsapp)?'<a class="btn sec sm" target="_blank" rel="noopener" href="'+waLink(c)+'">'+ic('chat')+'WhatsApp</a><a class="btn sm" href="tel:+55'+esc(dig(c.whatsapp))+'">'+ic('phone')+'Ligar</a>':'')+'</div></div>';
  h+=c.proxData||c.proxAcao?'<div class="nextbar">'+ic('clock')+'<span>Próximo passo: <b>'+esc(c.proxAcao||'retornar')+'</b>'+(c.proxData?' em '+br(c.proxData):'')+'</span></div>':'<div style="height:18px"></div>';
+ h+='<div class="card">'+seg('Canal de contato','canal',{canal:canalDe(c)},['WhatsApp','E-mail','Instagram'])+(canalDe(c)==='E-mail'?'<label>E-mail para a proposta<input type="email" value="'+esc(c.email||'')+'" onchange="cur().email=this.value.trim();save()" placeholder="nome@empresa.com.br"></label>':'')+'<div class="muted" style="font-size:12.5px">E-mail e Instagram tiram o contato da fila de A chamar e levam para Outros canais.</div></div>';
  h+='<div class="cols"><div>';
  h+='<div class="card"><div class="sh"><span class="n">'+ic('edit')+'</span><div class="t">Registrar conversa<small>O que foi conversado e a data. A situação leva o contato para o CRM.</small></div></div>';
  h+='<div class="row"><label style="flex:0 0 170px;min-width:150px">Data<input type="date" id="rd" value="'+hoje()+'"></label><label>O que foi abordado<textarea id="rt" rows="3" placeholder="Ex.: respondeu que tem interesse, pediu para falar depois das 14h"></textarea></label></div>';
